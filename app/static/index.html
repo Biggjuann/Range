@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Range · Average Daily Range</title>
+<style>
+  :root {
+    --bg: #0b0f17;
+    --panel: #131a26;
+    --panel-2: #1b2434;
+    --line: #263145;
+    --text: #e6edf6;
+    --muted: #8b98ab;
+    --accent: #4da3ff;
+    --up: #35d07f;
+    --warn: #ffb020;
+    --danger: #ff5d5d;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: radial-gradient(1200px 600px at 70% -10%, #16233a 0%, var(--bg) 55%);
+    color: var(--text);
+    min-height: 100vh;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 32px 20px 80px; }
+  header h1 { margin: 0; font-size: 26px; letter-spacing: .3px; }
+  header p { margin: 6px 0 0; color: var(--muted); }
+  .badge { color: var(--accent); font-weight: 600; }
+
+  form {
+    display: flex; gap: 10px; flex-wrap: wrap; margin: 26px 0 8px;
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 16px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+  input, select {
+    background: var(--panel-2); border: 1px solid var(--line); color: var(--text);
+    border-radius: 10px; padding: 11px 13px; font-size: 15px; outline: none;
+  }
+  input:focus, select:focus { border-color: var(--accent); }
+  #symbol { text-transform: uppercase; width: 190px; font-weight: 600; letter-spacing: 1px; }
+  button {
+    align-self: flex-end; background: var(--accent); color: #04101f; border: none;
+    border-radius: 10px; padding: 12px 22px; font-size: 15px; font-weight: 700;
+    cursor: pointer; transition: filter .15s;
+  }
+  button:hover { filter: brightness(1.08); }
+  button:disabled { opacity: .55; cursor: default; }
+  .examples { color: var(--muted); font-size: 13px; margin: 4px 2px 0; }
+  .examples a { color: var(--accent); text-decoration: none; margin-right: 10px; cursor: pointer; }
+
+  #status { margin: 20px 2px; min-height: 20px; }
+  .err { color: var(--danger); }
+  .muted { color: var(--muted); }
+
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; margin-top: 8px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px;
+  }
+  .card .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .card .v { font-size: 26px; font-weight: 700; margin-top: 6px; }
+  .card .v small { font-size: 14px; color: var(--muted); font-weight: 500; }
+
+  .section-title { margin: 30px 0 12px; font-size: 14px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .sub { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+  .sub .card .v { font-size: 20px; }
+
+  .chart { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 18px; margin-top: 8px; }
+  .bars { display: flex; align-items: flex-end; gap: 3px; height: 160px; }
+  .bar { flex: 1; background: linear-gradient(180deg, var(--accent), #2b6fb0); border-radius: 3px 3px 0 0; min-height: 2px; }
+  .bar.wide { background: linear-gradient(180deg, var(--warn), #b57810); }
+  .chart .axis { display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 14px; }
+  th, td { text-align: right; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+  tbody tr:hover { background: var(--panel-2); }
+  .hidden { display: none; }
+  footer { margin-top: 40px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Range <span class="badge">·</span> Average Daily Range</h1>
+    <p>Measure the average daily range of any stock, ETF, index, or futures contract — Schwab market data.</p>
+  </header>
+
+  <form id="form">
+    <div class="field">
+      <label for="symbol">Symbol</label>
+      <input id="symbol" name="symbol" placeholder="AAPL" autocomplete="off" autofocus />
+    </div>
+    <div class="field">
+      <label for="days">Trading days</label>
+      <select id="days" name="days">
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="20" selected>20</option>
+        <option value="30">30</option>
+        <option value="60">60</option>
+        <option value="90">90</option>
+        <option value="120">120</option>
+        <option value="252">252 (1yr)</option>
+      </select>
+    </div>
+    <button id="go" type="submit">Measure</button>
+  </form>
+  <div class="examples">
+    Try:
+    <a data-sym="AAPL">AAPL</a>
+    <a data-sym="QQQ">QQQ</a>
+    <a data-sym="SPY">SPY</a>
+    <a data-sym="NVDA">NVDA</a>
+    <a data-sym="/ES">/ES (futures)</a>
+    <a data-sym="$SPX">$SPX (index)</a>
+  </div>
+
+  <div id="status"></div>
+
+  <div id="results" class="hidden">
+    <div class="cards">
+      <div class="card"><div class="k">ADR ($)</div><div class="v" id="adr_d">—</div></div>
+      <div class="card"><div class="k">ADR (%)</div><div class="v" id="adr_p">—</div></div>
+      <div class="card"><div class="k">ATR ($)</div><div class="v" id="atr_d">—</div></div>
+      <div class="card"><div class="k">ATR (%)</div><div class="v" id="atr_p">—</div></div>
+    </div>
+
+    <div class="section-title">By window (ADR $)</div>
+    <div class="sub">
+      <div class="card"><div class="k">5-day</div><div class="v" id="w5">—</div></div>
+      <div class="card"><div class="k">10-day</div><div class="v" id="w10">—</div></div>
+      <div class="card"><div class="k">20-day</div><div class="v" id="w20">—</div></div>
+      <div class="card"><div class="k">60-day</div><div class="v" id="w60">—</div></div>
+    </div>
+
+    <div class="section-title">Daily range — recent sessions</div>
+    <div class="chart">
+      <div class="bars" id="bars"></div>
+      <div class="axis"><span id="axis_from">—</span><span id="axis_to">—</span></div>
+    </div>
+
+    <div class="section-title">Sessions</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr><th>Date</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Range</th></tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <footer>
+    Shared Schwab authorization · educational tooling, not investment advice.
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const fmt = (x, d = 2) => (x == null ? "—" : Number(x).toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d }));
+
+function setStatus(html, cls) {
+  const s = $("status");
+  s.className = cls || "";
+  s.innerHTML = html;
+}
+
+async function measure(symbol, days) {
+  symbol = (symbol || "").trim().toUpperCase();
+  if (!symbol) { setStatus("Enter a symbol.", "err"); return; }
+  $("go").disabled = true;
+  setStatus(`Fetching <b>${symbol}</b> …`, "muted");
+  try {
+    const r = await fetch(`/api/range?symbol=${encodeURIComponent(symbol)}&days=${encodeURIComponent(days)}`);
+    const j = await r.json();
+    if (!r.ok) throw new Error(j.error || `HTTP ${r.status}`);
+    render(j);
+    setStatus(`<b>${j.symbol}</b> · ${j.sessions_used} sessions · ${j.from_date} → ${j.to_date}`, "muted");
+  } catch (e) {
+    $("results").classList.add("hidden");
+    setStatus(`Could not measure <b>${symbol}</b>: ${e.message}`, "err");
+  } finally {
+    $("go").disabled = false;
+  }
+}
+
+function render(j) {
+  $("adr_d").innerHTML = fmt(j.adr_dollars) + ' <small>$</small>';
+  $("adr_p").innerHTML = fmt(j.adr_percent) + ' <small>%</small>';
+  $("atr_d").innerHTML = fmt(j.atr_dollars) + ' <small>$</small>';
+  $("atr_p").innerHTML = fmt(j.atr_percent) + ' <small>%</small>';
+  $("w5").textContent = fmt(j.windows["5"]);
+  $("w10").textContent = fmt(j.windows["10"]);
+  $("w20").textContent = fmt(j.windows["20"]);
+  $("w60").textContent = fmt(j.windows["60"]);
+
+  const sessions = j.sessions || [];
+  const maxRange = Math.max(...sessions.map(s => s.range), 0.0001);
+  const avg = j.adr_dollars || 0;
+  const bars = $("bars");
+  bars.innerHTML = "";
+  sessions.forEach(s => {
+    const b = document.createElement("div");
+    b.className = "bar" + (s.range > avg * 1.5 ? " wide" : "");
+    b.style.height = Math.max(2, (s.range / maxRange) * 100) + "%";
+    b.title = `${s.date}: ${fmt(s.range)}`;
+    bars.appendChild(b);
+  });
+  $("axis_from").textContent = j.from_date || "";
+  $("axis_to").textContent = j.to_date || "";
+
+  const tb = $("tbody");
+  tb.innerHTML = "";
+  sessions.slice().reverse().forEach(s => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${s.date}</td><td>${fmt(s.open)}</td><td>${fmt(s.high)}</td>` +
+      `<td>${fmt(s.low)}</td><td>${fmt(s.close)}</td><td>${fmt(s.range)}</td>`;
+    tb.appendChild(tr);
+  });
+
+  $("results").classList.remove("hidden");
+}
+
+$("form").addEventListener("submit", (e) => {
+  e.preventDefault();
+  measure($("symbol").value, $("days").value);
+});
+document.querySelectorAll(".examples a").forEach(a => {
+  a.addEventListener("click", () => {
+    $("symbol").value = a.dataset.sym;
+    measure(a.dataset.sym, $("days").value);
+  });
+});
+</script>
+</body>
+</html>

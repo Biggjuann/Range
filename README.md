@@ -27,6 +27,24 @@ For the requested window of completed daily sessions:
 It also surfaces the most recent session, the widest/narrowest sessions in the
 window, and 5 / 10 / 20 / 60-day ADR windows for a quick trend read.
 
+### Sigma (σ) moves — distribution of daily returns
+
+Beyond range, it characterises the distribution of daily close-to-close
+returns over the window:
+
+| Metric | Definition |
+|---|---|
+| **Daily σ** | standard deviation of daily % returns (the daily volatility) |
+| **Annualized vol** | daily σ × √252 |
+| **±1σ / ±2σ / ±3σ counts** | how often the actual move exceeded k·σ, split **up vs down** |
+| **vs Normal** | each count against the 68/95/99.7 rule (~31.73% / ~4.55% / ~0.27% of days) |
+
+For SPX/SPY over ~200 days this answers "how often does it exceed a 2σ move
+up or down": the dashboard shows the count, the frequency, and how many times
+the normal-distribution expectation (~4.55%, i.e. ~9 of 200 days) it ran —
+markets' fat tails usually overshoot ±2σ and badly overshoot ±3σ. The ±2σ+
+days are listed with their return and σ magnitude.
+
 ## Symbols
 
 - **Stocks / ETFs**: `AAPL`, `QQQ`, `SPY`, `NVDA`
@@ -42,6 +60,11 @@ GET /api/range?symbol=QQQ&days=20      -> full range report (JSON)
 GET /api/config                        -> healthcheck + non-secret config
 GET /                                  -> the dashboard
 ```
+
+The range report includes a `sigma` block: `daily_sigma_pct`,
+`annualized_vol_pct`, per-k `buckets` (`up` / `down` / `total` /
+`pct_of_days` / `expected_pct` / `expected_count`), and `two_sigma_days`
+(the ±2σ+ exceedance days). Example: `/api/range?symbol=SPY&days=200`.
 
 `days` defaults to `RANGE_DEFAULT_DAYS` (20) and is clamped to `1…2000`.
 

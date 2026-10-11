@@ -139,6 +139,31 @@
       <div class="card"><div class="k">60-day</div><div class="v" id="w60">—</div></div>
     </div>
 
+    <div class="section-title">Sigma (σ) moves — distribution of daily returns</div>
+    <div class="cards">
+      <div class="card"><div class="k">Daily σ</div><div class="v" id="sig_d">—</div></div>
+      <div class="card"><div class="k">Annualized vol</div><div class="v" id="sig_av">—</div></div>
+      <div class="card"><div class="k">±2σ days</div><div class="v" id="sig_2ct">—</div></div>
+      <div class="card"><div class="k">±2σ frequency</div><div class="v" id="sig_2f">—</div></div>
+    </div>
+    <div style="overflow-x:auto">
+      <table id="sig_table">
+        <thead>
+          <tr><th>Threshold</th><th>± move</th><th>Up</th><th>Down</th><th>Total</th><th>% of days</th><th>Normal expects</th></tr>
+        </thead>
+        <tbody id="sig_tbody"></tbody>
+      </table>
+    </div>
+    <div id="sig_note" class="examples" style="margin-top:8px"></div>
+
+    <div class="section-title">±2σ+ exceedance days</div>
+    <div style="overflow-x:auto">
+      <table>
+        <thead><tr><th>Date</th><th>Return %</th><th>σ</th></tr></thead>
+        <tbody id="sig_exc"></tbody>
+      </table>
+    </div>
+
     <div class="section-title">Daily range — recent sessions</div>
     <div class="chart">
       <div class="bars" id="bars"></div>
@@ -190,6 +215,46 @@ async function measure(symbol, days) {
   }
 }
 
+function renderSigma(s) {
+  const tb = $("sig_tbody");
+  const exc = $("sig_exc");
+  tb.innerHTML = "";
+  exc.innerHTML = "";
+  if (!s) {
+    $("sig_d").textContent = $("sig_av").textContent = "—";
+    $("sig_2ct").textContent = $("sig_2f").textContent = "—";
+    $("sig_note").textContent = "Not enough history to compute σ moves.";
+    return;
+  }
+  $("sig_d").innerHTML = fmt(s.daily_sigma_pct) + ' <small>%</small>';
+  $("sig_av").innerHTML = fmt(s.annualized_vol_pct) + ' <small>%</small>';
+  const b2 = s.buckets["2"];
+  $("sig_2ct").innerHTML = b2.total + ' <small>/ ' + s.return_count + '</small>';
+  $("sig_2f").innerHTML = fmt(b2.pct_of_days) + ' <small>% vs ' + fmt(b2.expected_pct) + '% exp</small>';
+
+  [s.buckets["1"], s.buckets["2"], s.buckets["3"]].forEach(b => {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>±${b.k}σ</td><td>±${fmt(b.threshold_pct)}%</td>` +
+      `<td>${b.up}</td><td>${b.down}</td><td>${b.total}</td>` +
+      `<td>${fmt(b.pct_of_days)}%</td><td>${fmt(b.expected_pct)}% (${fmt(b.expected_count, 1)})</td>`;
+    tb.appendChild(tr);
+  });
+
+  const ratio = b2.expected_pct ? (b2.pct_of_days / b2.expected_pct) : null;
+  $("sig_note").innerHTML = `${s.return_count} daily returns · daily σ = ${fmt(s.daily_sigma_pct)}%. ` +
+    (ratio != null ? `±2σ days occurred <b>${fmt(ratio, 1)}×</b> the ~4.55% a normal distribution predicts.` : "");
+
+  (s.two_sigma_days || []).forEach(d => {
+    const tr = document.createElement("tr");
+    const color = d.return_pct >= 0 ? "var(--up)" : "var(--danger)";
+    tr.innerHTML = `<td>${d.date}</td><td style="color:${color}">${fmt(d.return_pct)}%</td><td>${fmt(d.sigmas)}σ</td>`;
+    exc.appendChild(tr);
+  });
+  if (!(s.two_sigma_days || []).length) {
+    exc.innerHTML = '<tr><td colspan="3" class="muted">No ±2σ days in this window.</td></tr>';
+  }
+}
+
 function render(j) {
   $("adr_d").innerHTML = fmt(j.adr_dollars) + ' <small>$</small>';
   $("adr_p").innerHTML = fmt(j.adr_percent) + ' <small>%</small>';
@@ -199,6 +264,8 @@ function render(j) {
   $("w10").textContent = fmt(j.windows["10"]);
   $("w20").textContent = fmt(j.windows["20"]);
   $("w60").textContent = fmt(j.windows["60"]);
+
+  renderSigma(j.sigma);
 
   const sessions = j.sessions || [];
   const maxRange = Math.max(...sessions.map(s => s.range), 0.0001);

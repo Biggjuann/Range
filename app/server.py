@@ -38,7 +38,9 @@ def range_api(
     if not sym:
         return JSONResponse({"error": "symbol is required"}, status_code=400)
     try:
-        candles = schwab.daily_history(sym, days)
+        # Fetch one extra prior session so the σ/return window yields a full
+        # `days` daily returns (range metrics still use the last `days`).
+        candles = schwab.daily_history(sym, days + 1)
     except SchwabError as exc:
         return JSONResponse({"error": str(exc), "symbol": sym}, status_code=502)
     if not candles:

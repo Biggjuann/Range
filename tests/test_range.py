@@ -57,8 +57,44 @@ def test_window_trim():
     print("test_window_trim OK")
 
 
+def test_sigma_moves():
+    # Build closes with mostly tiny moves and a few deliberate large jumps so
+    # the σ-exceedance counting is checkable.
+    closes = [100.0]
+    # 30 small alternating +/-0.1% moves
+    for i in range(30):
+        closes.append(closes[-1] * (1.001 if i % 2 == 0 else 0.999))
+    # one big up day, one big down day
+    closes.append(closes[-1] * 1.08)   # +8%
+    closes.append(closes[-1] * 0.92)   # -8%
+    candles = [
+        _candle_seq(i, c) for i, c in enumerate(closes)
+    ]
+    rep = compute("SIG", candles, len(candles) - 1)
+    sig = rep["sigma"]
+    assert sig is not None, "sigma block missing"
+    assert sig["return_count"] == len(closes) - 1, sig["return_count"]
+    assert sig["daily_sigma_pct"] > 0
+    # the two 8% moves must each be well beyond 2σ and show up as exceedances
+    assert sig["buckets"]["2"]["up"] >= 1, sig["buckets"]["2"]
+    assert sig["buckets"]["2"]["down"] >= 1, sig["buckets"]["2"]
+    assert len(sig["two_sigma_days"]) >= 2, sig["two_sigma_days"]
+    # normal expectation for ±2σ is ~4.55%
+    assert abs(sig["buckets"]["2"]["expected_pct"] - 4.55) < 0.1, sig["buckets"]["2"]["expected_pct"]
+    print("test_sigma_moves OK")
+
+
+def _candle_seq(i, close):
+    # a flat-ish OHLC around `close`; dates must be strictly increasing
+    day = 1 + i
+    base = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(days=i)
+    epoch_ms = int(base.timestamp() * 1000)
+    return Candle(epoch_ms, close, close * 1.002, close * 0.998, close, 1000)
+
+
 if __name__ == "__main__":
     test_adr_basic()
     test_atr_includes_gaps()
     test_window_trim()
+    test_sigma_moves()
     print("\nAll range tests passed.")

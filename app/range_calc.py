@@ -13,16 +13,103 @@ Definitions (all computed over the supplied completed sessions):
 
 We also surface the most-recent session, the widest/narrowest sessions in the
 window, and multi-window ADRs (5 / 10 / 20 / 60 day) for quick comparison.
+
+Sigma (σ) moves
+---------------
+Beyond range, we characterise the *distribution of daily close-to-close
+returns* over the window: their standard deviation (σ, the daily volatility),
+and how often the actual move exceeded ±1σ / ±2σ / ±3σ — split into up and
+down days. Each count is compared against the Normal-distribution expectation
+(68/95/99.7 rule: ~31.73% of days beyond ±1σ, ~4.55% beyond ±2σ, ~0.27%
+beyond ±3σ). Fat-tailed markets routinely exceed the ±2σ/±3σ expectation.
 """
 from __future__ import annotations
 
+import math
 from typing import Dict, List, Optional
 
 from app.schwab import Candle
 
+# Normal-distribution share of observations beyond ±kσ (two-tailed), as a %.
+# P(|Z| > k) = erfc(k / sqrt(2)).
+NORMAL_BEYOND = {
+    1: math.erfc(1 / math.sqrt(2)) * 100,  # 31.73%
+    2: math.erfc(2 / math.sqrt(2)) * 100,  # 4.55%
+    3: math.erfc(3 / math.sqrt(2)) * 100,  # 0.27%
+}
+
 
 def _mean(xs: List[float]) -> Optional[float]:
     return sum(xs) / len(xs) if xs else None
+
+
+def _stdev(xs: List[float]) -> Optional[float]:
+    """Sample standard deviation (ddof=1)."""
+    if len(xs) < 2:
+        return None
+    m = sum(xs) / len(xs)
+    var = sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
+    return math.sqrt(var)
+
+
+def _sigma_stats(candles: List[Candle]) -> Optional[Dict]:
+    """Distribution of daily close-to-close % returns + σ-exceedance counts.
+
+    ``candles`` is the return window (oldest -> newest); it yields len-1
+    returns. Thresholds are a multiple of the window's own return σ.
+    """
+    rets: List[Dict] = []
+    for i in range(1, len(candles)):
+        prev, cur = candles[i - 1], candles[i]
+        if not prev.close:
+            continue
+        rets.append({
+            "date": cur.date.isoformat(),
+            "ret": (cur.close - prev.close) / prev.close * 100,  # percent
+        })
+    vals = [r["ret"] for r in rets]
+    sd = _stdev(vals)
+    if sd is None or sd == 0:
+        return None
+    mean = _mean(vals) or 0.0
+    n = len(vals)
+
+    def bucket(k: int) -> Dict:
+        thr = k * sd
+        up = [r for r in rets if r["ret"] > thr]
+        down = [r for r in rets if r["ret"] < -thr]
+        total = len(up) + len(down)
+        exp_pct = NORMAL_BEYOND[k]
+        return {
+            "k": k,
+            "threshold_pct": _round(thr, 3),
+            "up": len(up),
+            "down": len(down),
+            "total": total,
+            "pct_of_days": _round(total / n * 100, 2),
+            "expected_pct": _round(exp_pct, 2),
+            "expected_count": _round(exp_pct / 100 * n, 1),
+        }
+
+    # The ±2σ+ exceedance days, largest move first (for the table).
+    two_sd = sorted(
+        (r for r in rets if abs(r["ret"]) > 2 * sd),
+        key=lambda r: abs(r["ret"]),
+        reverse=True,
+    )
+
+    return {
+        "return_count": n,
+        "daily_sigma_pct": _round(sd, 3),
+        "mean_daily_return_pct": _round(mean, 4),
+        "annualized_vol_pct": _round(sd * math.sqrt(252), 2),
+        "buckets": {str(k): bucket(k) for k in (1, 2, 3)},
+        "two_sigma_days": [
+            {"date": r["date"], "return_pct": _round(r["ret"], 2),
+             "sigmas": _round(r["ret"] / sd, 2)}
+            for r in two_sd
+        ],
+    }
 
 
 def _round(x: Optional[float], nd: int = 4) -> Optional[float]:
@@ -56,8 +143,14 @@ def _true_ranges(candles: List[Candle]) -> List[float]:
 
 
 def compute(symbol: str, candles: List[Candle], days: int) -> Dict:
-    """Build the full range report for the requested window of candles."""
+    """Build the full range report for the requested window of candles.
+
+    Range metrics use the last ``days`` sessions. Return/σ metrics use one
+    extra prior session (``days + 1`` closes) so the window yields a full
+    ``days`` daily returns.
+    """
     window = candles[-days:] if days else candles
+    ret_window = candles[-(days + 1):] if days else candles
     n = len(window)
 
     ranges = [c.high - c.low for c in window]
@@ -113,6 +206,7 @@ def compute(symbol: str, candles: List[Candle], days: int) -> Dict:
             "20": window_adr(20),
             "60": window_adr(60),
         },
+        "sigma": _sigma_stats(ret_window),
         # Recent sessions (oldest -> newest) for the sparkline / table.
         "sessions": [
             {**c.as_dict(), "range": _round(c.high - c.low)} for c in window

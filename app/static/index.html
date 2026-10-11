@@ -143,13 +143,14 @@
     <div class="cards">
       <div class="card"><div class="k">Daily σ</div><div class="v" id="sig_d">—</div></div>
       <div class="card"><div class="k">Annualized vol</div><div class="v" id="sig_av">—</div></div>
-      <div class="card"><div class="k">±2σ days</div><div class="v" id="sig_2ct">—</div></div>
+      <div class="card"><div class="k">±2σ days (exceeded)</div><div class="v" id="sig_2ct">—</div></div>
       <div class="card"><div class="k">±2σ frequency</div><div class="v" id="sig_2f">—</div></div>
+      <div class="card"><div class="k">±2σ tagged, held</div><div class="v" id="sig_2h">—</div></div>
     </div>
     <div style="overflow-x:auto">
       <table id="sig_table">
         <thead>
-          <tr><th>Threshold</th><th>± move</th><th>Up</th><th>Down</th><th>Total</th><th>% of days</th><th>Normal expects</th></tr>
+          <tr><th>Threshold</th><th>± move</th><th>Up</th><th>Down</th><th>Exceeded</th><th>% of days</th><th>Normal expects</th><th>Tagged, held</th></tr>
         </thead>
         <tbody id="sig_tbody"></tbody>
       </table>
@@ -222,7 +223,7 @@ function renderSigma(s) {
   exc.innerHTML = "";
   if (!s) {
     $("sig_d").textContent = $("sig_av").textContent = "—";
-    $("sig_2ct").textContent = $("sig_2f").textContent = "—";
+    $("sig_2ct").textContent = $("sig_2f").textContent = $("sig_2h").textContent = "—";
     $("sig_note").textContent = "Not enough history to compute σ moves.";
     return;
   }
@@ -231,18 +232,23 @@ function renderSigma(s) {
   const b2 = s.buckets["2"];
   $("sig_2ct").innerHTML = b2.total + ' <small>/ ' + s.return_count + '</small>';
   $("sig_2f").innerHTML = fmt(b2.pct_of_days) + ' <small>% vs ' + fmt(b2.expected_pct) + '% exp</small>';
+  const held2 = (b2.touched_not_exceeded || {total: 0, pct_of_days: 0});
+  $("sig_2h").innerHTML = held2.total + ' <small>' + fmt(held2.pct_of_days) + '% of days</small>';
 
   [s.buckets["1"], s.buckets["2"], s.buckets["3"]].forEach(b => {
     const tr = document.createElement("tr");
+    const held = b.touched_not_exceeded || {total: 0, up: 0, down: 0};
     tr.innerHTML = `<td>±${b.k}σ</td><td>±${fmt(b.threshold_pct)}%</td>` +
       `<td>${b.up}</td><td>${b.down}</td><td>${b.total}</td>` +
-      `<td>${fmt(b.pct_of_days)}%</td><td>${fmt(b.expected_pct)}% (${fmt(b.expected_count, 1)})</td>`;
+      `<td>${fmt(b.pct_of_days)}%</td><td>${fmt(b.expected_pct)}% (${fmt(b.expected_count, 1)})</td>` +
+      `<td>${held.total} <span class="muted">(${held.up}↑ ${held.down}↓)</span></td>`;
     tb.appendChild(tr);
   });
 
   const ratio = b2.expected_pct ? (b2.pct_of_days / b2.expected_pct) : null;
   $("sig_note").innerHTML = `${s.return_count} daily returns · daily σ = ${fmt(s.daily_sigma_pct)}%. ` +
-    (ratio != null ? `±2σ days occurred <b>${fmt(ratio, 1)}×</b> the ~4.55% a normal distribution predicts.` : "");
+    (ratio != null ? `±2σ days occurred <b>${fmt(ratio, 1)}×</b> the ~4.55% a normal distribution predicts. ` : "") +
+    `"Tagged, held" = the intraday high/low reached ±2σ (from the prior close) but the close stayed inside: <b>${held2.total}</b> day(s).`;
 
   (s.two_sigma_days || []).forEach(d => {
     const tr = document.createElement("tr");

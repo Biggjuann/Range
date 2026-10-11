@@ -36,8 +36,9 @@ returns over the window:
 |---|---|
 | **Daily σ** | standard deviation of daily % returns (the daily volatility) |
 | **Annualized vol** | daily σ × √252 |
-| **±1σ / ±2σ / ±3σ counts** | how often the actual move exceeded k·σ, split **up vs down** |
+| **±1σ / ±2σ / ±3σ counts** | how often the **close** exceeded k·σ, split **up vs down** |
 | **vs Normal** | each count against the 68/95/99.7 rule (~31.73% / ~4.55% / ~0.27% of days) |
+| **Tagged, held** | how often the **intraday** high/low reached ±k·σ (from the prior close) but the close stayed inside the band — i.e. the level was touched but not exceeded, split up vs down |
 
 For SPX/SPY over ~200 days this answers "how often does it exceed a 2σ move
 up or down": the dashboard shows the count, the frequency, and how many times
@@ -63,8 +64,10 @@ GET /                                  -> the dashboard
 
 The range report includes a `sigma` block: `daily_sigma_pct`,
 `annualized_vol_pct`, per-k `buckets` (`up` / `down` / `total` /
-`pct_of_days` / `expected_pct` / `expected_count`), and `two_sigma_days`
-(the ±2σ+ exceedance days). Example: `/api/range?symbol=SPY&days=200`.
+`pct_of_days` / `expected_pct` / `expected_count`, plus
+`touched_not_exceeded` = `{up, down, total, pct_of_days}` for the days that
+tagged ±kσ intraday but closed inside), and `two_sigma_days` (the ±2σ+
+exceedance days). Example: `/api/range?symbol=SPY&days=200`.
 
 `days` defaults to `RANGE_DEFAULT_DAYS` (20) and is clamped to `1…2000`.
 

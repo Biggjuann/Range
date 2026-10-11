@@ -63,9 +63,12 @@ def _sigma_stats(candles: List[Candle]) -> Optional[Dict]:
         prev, cur = candles[i - 1], candles[i]
         if not prev.close:
             continue
+        pc = prev.close
         rets.append({
             "date": cur.date.isoformat(),
-            "ret": (cur.close - prev.close) / prev.close * 100,  # percent
+            "ret": (cur.close - pc) / pc * 100,       # close-to-close %
+            "hi": (cur.high - pc) / pc * 100,         # intraday high move vs prior close
+            "lo": (cur.low - pc) / pc * 100,          # intraday low move vs prior close
         })
     vals = [r["ret"] for r in rets]
     sd = _stdev(vals)
@@ -79,6 +82,11 @@ def _sigma_stats(candles: List[Candle]) -> Optional[Dict]:
         up = [r for r in rets if r["ret"] > thr]
         down = [r for r in rets if r["ret"] < -thr]
         total = len(up) + len(down)
+        # "Touched but didn't exceed": the intraday high/low reached the ±kσ
+        # level (measured from the prior close) but the close stayed within it.
+        touch_up = [r for r in rets if r["hi"] >= thr and r["ret"] <= thr]
+        touch_down = [r for r in rets if r["lo"] <= -thr and r["ret"] >= -thr]
+        touched_held = len(touch_up) + len(touch_down)
         exp_pct = NORMAL_BEYOND[k]
         return {
             "k": k,
@@ -89,6 +97,13 @@ def _sigma_stats(candles: List[Candle]) -> Optional[Dict]:
             "pct_of_days": _round(total / n * 100, 2),
             "expected_pct": _round(exp_pct, 2),
             "expected_count": _round(exp_pct / 100 * n, 1),
+            # touched the level intraday but closed back inside
+            "touched_not_exceeded": {
+                "up": len(touch_up),
+                "down": len(touch_down),
+                "total": touched_held,
+                "pct_of_days": _round(touched_held / n * 100, 2),
+            },
         }
 
     # The ±2σ+ exceedance days, most recent first (chronological order).

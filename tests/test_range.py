@@ -92,9 +92,41 @@ def _candle_seq(i, close):
     return Candle(epoch_ms, close, close * 1.002, close * 0.998, close, 1000)
 
 
+def _candle_ohlc(i, o, h, l, c):
+    base = dt.datetime(2024, 1, 1, tzinfo=dt.timezone.utc) + dt.timedelta(days=i)
+    return Candle(int(base.timestamp() * 1000), o, h, l, c, 1000)
+
+
+def test_touched_not_exceeded():
+    # Small, steady moves set a tiny σ (~0.1%). Then one "tag and fade" day:
+    # intraday high spikes +2% above the prior close (≫ 2σ) but the close
+    # finishes flat (inside the band) -> counts as tagged-but-not-exceeded up,
+    # and NOT as an exceedance.
+    closes = [100.0]
+    for i in range(40):
+        closes.append(closes[-1] * (1.001 if i % 2 == 0 else 0.999))
+    candles = [_candle_seq(i, c) for i, c in enumerate(closes)]
+
+    prior = closes[-1]
+    # tag-and-fade up day: high = +2%, close ~ flat (+0.02%)
+    tag_close = prior * 1.0002
+    candles.append(_candle_ohlc(len(closes), prior, prior * 1.02, prior * 0.999, tag_close))
+
+    rep = compute("TAG", candles, len(candles) - 1)
+    b2 = rep["sigma"]["buckets"]["2"]
+    held = b2["touched_not_exceeded"]
+    # the tag day reached +2σ intraday but closed inside -> held, not exceeded
+    assert held["up"] >= 1, held
+    # and it must NOT be counted as a close-based exceedance
+    assert b2["up"] == 0, b2
+    assert held["total"] == held["up"] + held["down"], held
+    print("test_touched_not_exceeded OK")
+
+
 if __name__ == "__main__":
     test_adr_basic()
     test_atr_includes_gaps()
     test_window_trim()
     test_sigma_moves()
+    test_touched_not_exceeded()
     print("\nAll range tests passed.")

@@ -91,10 +91,10 @@ def _sigma_stats(candles: List[Candle]) -> Optional[Dict]:
             "expected_count": _round(exp_pct / 100 * n, 1),
         }
 
-    # The ±2σ+ exceedance days, largest move first (for the table).
+    # The ±2σ+ exceedance days, most recent first (chronological order).
     two_sd = sorted(
         (r for r in rets if abs(r["ret"]) > 2 * sd),
-        key=lambda r: abs(r["ret"]),
+        key=lambda r: r["date"],
         reverse=True,
     )
 
